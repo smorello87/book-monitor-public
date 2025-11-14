@@ -130,6 +130,18 @@ class BookFinderScraper:
                 # Get rendered HTML
                 html = page.content()
 
+                # DEBUG: Save screenshot and HTML to see what's being returned
+                try:
+                    import os
+                    debug_dir = "debug_output"
+                    os.makedirs(debug_dir, exist_ok=True)
+                    page.screenshot(path=f"{debug_dir}/playwright_page.png")
+                    with open(f"{debug_dir}/playwright_page.html", "w", encoding="utf-8") as f:
+                        f.write(html)
+                    logger.info(f"DEBUG: Saved screenshot and HTML to {debug_dir}/")
+                except Exception as debug_e:
+                    logger.warning(f"Could not save debug output: {debug_e}")
+
                 # Close browser
                 browser.close()
 
@@ -792,6 +804,14 @@ class BookFinderScraper:
             )
 
         logger.debug(f"Found {len(listing_containers)} potential listing containers")
+
+        # DEBUG: If no containers found, log HTML snippet to diagnose
+        if len(listing_containers) == 0:
+            logger.warning(f"No listing containers found! HTML length: {len(html)} chars")
+            logger.warning(f"HTML snippet (first 500 chars): {html[:500]}")
+            # Check for common blocking patterns
+            if 'captcha' in html.lower() or 'robot' in html.lower() or 'blocked' in html.lower():
+                logger.error("Page appears to contain blocking/captcha content!")
 
         for container in listing_containers:
             listing = self._parse_listing(container, book_identifier)
