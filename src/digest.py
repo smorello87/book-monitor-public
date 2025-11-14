@@ -124,9 +124,9 @@ class DigestEmailer:
 
         if total_authors == 1:
             author = list(grouped.keys())[0]
-            return f"📚 {total_listings} Rare Books by {author}"
+            return f"📚 {total_listings} Books by {author}"
         else:
-            return f"📚 {total_listings} Rare Books Found - {total_authors} Authors"
+            return f"📚 {total_listings} Books Found - {total_authors} Authors"
 
     def _generate_html(self, grouped: Dict) -> str:
         """Generate HTML email content for author-based digest.
@@ -219,15 +219,18 @@ class DigestEmailer:
             justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
+            gap: 40px;
         }}
         .seller {{
             font-weight: 600;
             color: #2c3e50;
+            flex: 1;
         }}
         .price {{
             font-size: 1.3em;
             font-weight: bold;
             color: #c0392b;
+            white-space: nowrap;
         }}
         .condition {{
             display: inline-block;
@@ -261,12 +264,12 @@ class DigestEmailer:
 </head>
 <body>
     <div class="container">
-        <h1>📚 Rare Books Digest</h1>
+        <h1>📚 Books Digest</h1>
 
         <div class="summary">
             <strong>Date:</strong> {today}<br>
             <strong>New Listings:</strong> {total_listings} USED books by {total_authors} author{"s" if total_authors > 1 else ""}<br>
-            <strong>Sort Order:</strong> Highest price first (rare editions)
+            <strong>Sort Order:</strong> Highest price first
         </div>
 """
 
@@ -315,10 +318,6 @@ class DigestEmailer:
 """
 
         html += """
-        <div class="footer">
-            <p>You're monitoring rare/historical books by curated authors.</p>
-            <p>This digest shows USED books only, sorted by price (highest first) to highlight rare editions.</p>
-        </div>
     </div>
 </body>
 </html>
@@ -342,11 +341,11 @@ class DigestEmailer:
             for book_data in author_books.values()
         )
 
-        text = f"""RARE BOOKS DIGEST
+        text = f"""BOOKS DIGEST
 {today}
 
 New Listings: {total_listings} USED books by {total_authors} author{"s" if total_authors > 1 else ""}
-Sort Order: Highest price first (rare editions)
+Sort Order: Highest price first
 
 {"=" * 60}
 
@@ -382,10 +381,6 @@ Sort Order: Highest price first (rare editions)
 
                 text += "-" * 60 + "\n"
 
-        text += """
-You're monitoring rare/historical books by curated authors.
-This digest shows USED books only, sorted by price (highest first) to highlight rare editions.
-"""
         return text
 
     def _send_email(self, subject: str, html_content: str, text_content: str) -> bool:
