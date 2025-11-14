@@ -219,18 +219,19 @@ class DigestEmailer:
             justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
-            gap: 40px;
         }}
         .seller {{
             font-weight: 600;
             color: #2c3e50;
             flex: 1;
+            margin-right: 60px;
         }}
         .price {{
             font-size: 1.3em;
             font-weight: bold;
             color: #c0392b;
             white-space: nowrap;
+            margin-left: 20px;
         }}
         .condition {{
             display: inline-block;
