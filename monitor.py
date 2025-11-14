@@ -167,6 +167,18 @@ def check_search_spec(spec: dict, spec_id: str, scraper: BookFinderScraper,
         db.update_search_spec_checked(spec_id)
         return 0
 
+    # Filter by max_price if specified (BookFinder doesn't always respect maxPrice parameter)
+    if max_price is not None:
+        original_count = len(listings)
+        listings = [l for l in listings if l.get('price', float('inf')) <= max_price]
+        if len(listings) < original_count:
+            logger.info(f"Filtered {original_count - len(listings)} listings above max price ${max_price}")
+
+    if not listings:
+        logger.info(f"No listings found under max price ${max_price} for {search_desc}")
+        db.update_search_spec_checked(spec_id)
+        return 0
+
     # Group listings by book (by book_id)
     books_found = {}
     for listing in listings:
@@ -182,7 +194,8 @@ def check_search_spec(spec: dict, spec_id: str, scraper: BookFinderScraper,
         if book_id not in books_found:
             books_found[book_id] = {
                 'title': listing.get('title') or title or 'Unknown',
-                'author': author,
+                'author': listing.get('author') or author,  # Use author from listing if available
+                'isbn': isbn if isbn else None,  # Include ISBN if we searched by ISBN
                 'year': year,
                 'keywords': keywords,
                 'listings': []
@@ -193,12 +206,18 @@ def check_search_spec(spec: dict, spec_id: str, scraper: BookFinderScraper,
     total_new_listings = 0
     for book_id, book_data in books_found.items():
         # Upsert book with metadata
-        db.upsert_book(
+        # For ISBN searches, book_id IS the ISBN, so we need to generate proper book_id
+        actual_book_id = db.upsert_book(
             title=book_data['title'],
-            author=author,
-            isbn=None,  # ISBNs not available from search specs
+            author=book_data['author'],
+            isbn=book_data.get('isbn'),
             publication_year=year
         )
+
+        # Update book_id in all listings if it changed (ISBN → title+author hash)
+        if actual_book_id != book_id:
+            for listing in book_data['listings']:
+                listing['book_id'] = actual_book_id
 
         # Save listings for this book
         new_count = db.save_listings(book_data['listings'])
