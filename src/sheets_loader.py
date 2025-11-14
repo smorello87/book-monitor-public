@@ -32,6 +32,8 @@ class SheetsLoader:
             - year (int|None): Publication year (optional)
             - keywords (str|None): Search keywords (optional)
             - accept_new (bool): Accept NEW condition books (default: False)
+            - isbn (str|None): ISBN for direct ISBN search (optional)
+            - max_price (float|None): Maximum price filter (optional)
 
         Raises:
             Exception: If sheet cannot be read or has invalid format
@@ -42,8 +44,8 @@ class SheetsLoader:
             # Read CSV from Google Sheets
             df = pd.read_csv(self.csv_url)
 
-            # Expected columns: Author, Title, Year, Keyword, Accept New
-            expected_cols = ['Author', 'Title', 'Year', 'Keyword', 'Accept New']
+            # Expected columns: Author, Title, Year, Keyword, Accept New, ISBN, Price Below
+            expected_cols = ['Author', 'Title', 'Year', 'Keyword', 'Accept New', 'ISBN', 'Price Below']
 
             # Check if required column exists
             if 'Author' not in df.columns:
@@ -82,13 +84,29 @@ class SheetsLoader:
                 accept_new_raw = str(row.get('Accept New', '')).strip().upper() if pd.notna(row.get('Accept New')) else ''
                 accept_new = accept_new_raw in ['Y', 'YES', 'TRUE', '1']
 
+                # Parse ISBN column (optional)
+                isbn = str(row.get('ISBN', '')).strip() if pd.notna(row.get('ISBN')) else None
+                if isbn and isbn.lower() == 'nan':
+                    isbn = None
+
+                # Parse Price Below column (optional)
+                max_price_raw = row.get('Price Below')
+                max_price = None
+                if pd.notna(max_price_raw):
+                    try:
+                        max_price = float(max_price_raw)
+                    except (ValueError, TypeError):
+                        logger.warning(f"Row {idx+2}: Invalid price value '{max_price_raw}', ignoring")
+
                 # Create search spec
                 spec = {
                     'author': author,
                     'title': title,
                     'year': year,
                     'keywords': keywords,
-                    'accept_new': accept_new
+                    'accept_new': accept_new,
+                    'isbn': isbn,
+                    'max_price': max_price
                 }
 
                 search_specs.append(spec)

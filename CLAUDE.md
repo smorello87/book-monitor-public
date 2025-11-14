@@ -25,7 +25,7 @@ The maintainer has a PRIVATE repository at `../book-monitor/` with personal conf
 
 ## Overview
 
-Book Monitor v2 is an automated rare books listing tracker that monitors BookFinder.com based on search specifications from a Google Sheets document. It sends daily digest emails when new listings appear. The system uses Playwright for web scraping to handle JavaScript-rendered content and supports flexible search criteria: Author (required), Title (optional), Year (optional), and Keywords (optional).
+Book Monitor v2 is an automated rare books listing tracker that monitors BookFinder.com based on search specifications from a Google Sheets document. It sends daily digest emails when new listings appear. The system uses Playwright for web scraping to handle JavaScript-rendered content and supports flexible search criteria: Author (required), Title (optional), Year (optional), Keywords (optional), ISBN (optional), and Price Below (optional).
 
 **Version History**:
 - **v1** (archived in `archive/v1-zotero/`): Zotero-based system - automated monitoring of books in a Zotero library
@@ -45,7 +45,7 @@ The main entry point orchestrates a three-phase workflow:
 - Loads search specifications from public Google Sheets via CSV export
 - No authentication required (sheet must be "Anyone with link can view")
 - CSV URL format: `https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv`
-- Parses columns: Author (required), Title (optional), Year (optional), Keyword (optional)
+- Parses columns: Author (required), Title (optional), Year (optional), Keyword (optional), ISBN (optional), Price Below (optional), Accept New (optional)
 - Uses pandas for CSV parsing
 - Returns list of search spec dictionaries
 
@@ -62,7 +62,7 @@ The main entry point orchestrates a three-phase workflow:
 - Rate limiting: 10 second delays between requests by default
 
 **src/database.py**: SQLite persistence layer
-- **search_specs table**: Stores search specifications from Google Sheets (spec_id, author, title, year, keywords)
+- **search_specs table**: Stores search specifications from Google Sheets (spec_id, author, title, year, keywords, isbn, max_price, accept_new)
 - **authors table**: DEPRECATED (v1 only) - kept for backward compatibility
 - **books table**: Uses hash-based `book_id` (not ISBN) as primary key to support historical books without ISBNs
 - **listings table**: Tracks individual listings with deduplication via listing hash
@@ -76,24 +76,36 @@ The main entry point orchestrates a three-phase workflow:
 
 ### Search Strategy Details
 
-The system uses two different search strategies based on whether a title is provided in the Google Sheet:
+The system uses three different search strategies with priority-based selection:
 
-**Strategy 1: Title + Author Search** (when title is provided):
+**Search Priority**: ISBN → Title+Author → Author-Only
+
+**Strategy 1: ISBN Search** (when ISBN is provided - HIGHEST PRIORITY):
 ```
-/search/?author={full_author_name}&title={title}&keywords={keywords}&publicationMinYear={year}&publicationMaxYear={year}&mode=ADVANCED&viewAll=true
+/isbn/{isbn}/?viewAll=true&maxPrice={max_price}
+```
+- Uses direct ISBN endpoint for precise matching
+- Takes priority over all other search methods
+- Supports optional `maxPrice` parameter to filter listings
+
+**Strategy 2: Title + Author Search** (when title is provided but no ISBN):
+```
+/search/?author={full_author_name}&title={title}&keywords={keywords}&publicationMinYear={year}&publicationMaxYear={year}&maxPrice={max_price}&mode=ADVANCED&viewAll=true
 ```
 - Uses FULL author name (e.g., "Andre Luotto"), not just lastname
 - Precise search for a specific book
 - Filters results to match the exact author using `data-csa-c-authors` attribute verification
+- Supports optional `maxPrice` parameter
 
-**Strategy 2: Author-Only Search** (when no title is provided):
+**Strategy 3: Author-Only Search** (when no title or ISBN is provided):
 ```
-/search/?author={full_author_name}&title=&keywords={keywords}&publicationMinYear={year}&publicationMaxYear={year}&mode=ADVANCED&viewAll=true
+/search/?author={full_author_name}&title=&keywords={keywords}&publicationMinYear={year}&publicationMaxYear={year}&maxPrice={max_price}&mode=ADVANCED&viewAll=true
 ```
 - Uses FULL author name (e.g., "Bernardino Ciambelli")
 - Broad search for ALL books by that author
 - **CRITICAL**: Uses full name, NOT just lastname, to avoid false matches with other authors sharing the same surname
 - Filters results with strict author verification to prevent matches like "Pietro Ciambelli" when searching for "Bernardino Ciambelli"
+- Supports optional `maxPrice` parameter
 
 **Author Filtering (CRITICAL)**:
 - After scraping, each listing is verified against the searched author using the `data-csa-c-authors` attribute
@@ -104,6 +116,7 @@ The system uses two different search strategies based on whether a title is prov
 **BookFinder Parameters**:
 - `publicationMinYear` and `publicationMaxYear`: Year range (NOT just `year=`)
 - `keywords`: Additional search keywords
+- `maxPrice`: Maximum price filter (optional, filters listings above this price)
 - `mode=ADVANCED`: Uses advanced search mode
 - `viewAll=true`: CRITICAL - gets full listings page instead of grouped "bunch" results
 
@@ -183,6 +196,9 @@ sqlite3 data/books.db "SELECT COUNT(*) FROM listings WHERE notified = 0;"
 - `title`: Book title (OPTIONAL - when NULL, searches all books by author)
 - `publication_year`: Publication year (OPTIONAL)
 - `keywords`: Search keywords (OPTIONAL)
+- `isbn`: Book ISBN (OPTIONAL - when present, takes priority over title/author search)
+- `max_price`: Maximum price filter (OPTIONAL - filters listings above this price)
+- `accept_new`: Accept NEW condition books (OPTIONAL - default: False for USED only)
 - `added_date`, `last_checked`, `check_enabled`
 
 **authors table** (`author_id` is PRIMARY KEY) - DEPRECATED v1 only:
@@ -208,7 +224,7 @@ sqlite3 data/books.db "SELECT COUNT(*) FROM listings WHERE notified = 0;"
 - `google_sheets.sheet_id`: Google Sheets document ID (from URL)
 - Sheet must be "Anyone with link can view" for CSV export access
 - Required column: Author
-- Optional columns: Title, Year, Keyword
+- Optional columns: Title, Year, Keyword, ISBN, Price Below, Accept New
 
 **Search configuration**:
 - `search.condition_filter`: Filter condition - "used" (default), "any", or "new"

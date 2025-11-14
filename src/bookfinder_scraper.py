@@ -176,11 +176,12 @@ class BookFinderScraper:
 
         return results
 
-    def search_by_isbn(self, isbn: str) -> List[Dict]:
-        """Search for book listings by ISBN.
+    def search_by_isbn(self, isbn: str, max_price: Optional[float] = None) -> List[Dict]:
+        """Search for book listings by ISBN using direct ISBN endpoint.
 
         Args:
             isbn: Book ISBN (10 or 13 digits)
+            max_price: Maximum price filter (optional)
 
         Returns:
             List of listing dictionaries
@@ -192,21 +193,21 @@ class BookFinderScraper:
             logger.warning(f"Invalid ISBN: {isbn}")
             return []
 
-        logger.info(f"Searching BookFinder for ISBN: {clean_isbn}")
+        logger.info(f"Searching BookFinder for ISBN: {clean_isbn}" +
+                   (f" (max price: ${max_price})" if max_price else ""))
 
         try:
-            # Construct search URL
-            search_url = f"{self.base_url}/search/"
+            # Use direct ISBN endpoint: /isbn/{isbn}/
+            search_url = f"{self.base_url}/isbn/{clean_isbn}/"
             params = {
-                'keywords': clean_isbn,
+                'viewAll': 'true',  # Get full listings page instead of grouped results
                 'currency': 'USD',
-                'destination': 'us',
-                'mode': 'basic',
-                'classic': 'off',
-                'st': 'sr',
-                'ac': 'qr',
-                'viewAll': 'true'  # Get full listings page instead of grouped results
+                'destination': 'US'
             }
+
+            # Add max price filter if specified
+            if max_price is not None:
+                params['maxPrice'] = str(max_price)
 
             # Build full URL
             param_str = '&'.join([f"{k}={quote_plus(str(v))}" for k, v in params.items()])
@@ -266,7 +267,8 @@ class BookFinderScraper:
     def search_by_title_author(self, title: str, author: Optional[str] = None,
                                 book_id: Optional[str] = None, year: Optional[int] = None,
                                 keywords: Optional[str] = None,
-                                filter_condition: str = 'used') -> List[Dict]:
+                                filter_condition: str = 'used',
+                                max_price: Optional[float] = None) -> List[Dict]:
         """Search for book listings by title and author.
 
         Args:
@@ -276,6 +278,7 @@ class BookFinderScraper:
             year: Publication year (optional)
             keywords: Search keywords (optional)
             filter_condition: Condition filter ('used', 'any', 'new')
+            max_price: Maximum price filter (optional)
 
         Returns:
             List of listing dictionaries
@@ -297,7 +300,8 @@ class BookFinderScraper:
                 if name_parts:
                     author_lastname = name_parts[-1]
 
-        logger.info(f"Searching BookFinder for: {title} by {author_lastname or 'unknown author'}")
+        logger.info(f"Searching BookFinder for: {title} by {author_lastname or 'unknown author'}" +
+                   (f" (max price: ${max_price})" if max_price else ""))
 
         try:
             # Construct search URL with ADVANCED mode and separate fields
@@ -321,6 +325,10 @@ class BookFinderScraper:
             if year:
                 params['publicationMinYear'] = str(year)
                 params['publicationMaxYear'] = str(year)
+
+            # Add max price filter if specified
+            if max_price is not None:
+                params['maxPrice'] = str(max_price)
 
             # Build full URL
             param_str = '&'.join([f"{k}={quote_plus(str(v))}" for k, v in params.items()])
@@ -383,7 +391,8 @@ class BookFinderScraper:
 
     def search_by_author_only(self, author: str, author_id: Optional[str] = None,
                                filter_condition: str = 'used', year: Optional[int] = None,
-                               keywords: Optional[str] = None) -> List[Dict]:
+                               keywords: Optional[str] = None,
+                               max_price: Optional[float] = None) -> List[Dict]:
         """Search for ALL books by an author (no title specified).
 
         Args:
@@ -395,6 +404,7 @@ class BookFinderScraper:
                             'new' = only New condition
             year: Publication year (optional)
             keywords: Search keywords (optional)
+            max_price: Maximum price filter (optional)
 
         Returns:
             List of listing dictionaries with enhanced book info
@@ -421,7 +431,8 @@ class BookFinderScraper:
                 if name_parts:
                     author_lastname = name_parts[-1]
 
-        logger.info(f"Searching BookFinder for all books by: {author} (lastname: {author_lastname})")
+        logger.info(f"Searching BookFinder for all books by: {author} (lastname: {author_lastname})" +
+                   (f" (max price: ${max_price})" if max_price else ""))
 
         try:
             # Construct search URL with ADVANCED mode, author only (NO title)
@@ -444,6 +455,10 @@ class BookFinderScraper:
             if year:
                 params['publicationMinYear'] = str(year)
                 params['publicationMaxYear'] = str(year)
+
+            # Add max price filter if specified
+            if max_price is not None:
+                params['maxPrice'] = str(max_price)
 
             # Build full URL
             param_str = '&'.join([f"{k}={quote_plus(str(v))}" for k, v in params.items()])

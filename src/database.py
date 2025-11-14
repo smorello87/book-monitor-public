@@ -55,6 +55,8 @@ class Database:
                 title TEXT,
                 publication_year INTEGER,
                 keywords TEXT,
+                isbn TEXT,
+                max_price REAL,
                 accept_new BOOLEAN DEFAULT 0,
                 added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_checked TIMESTAMP,
@@ -121,6 +123,20 @@ class Database:
         except sqlite3.OperationalError:
             logger.info("Adding accept_new column to search_specs table")
             cursor.execute("ALTER TABLE search_specs ADD COLUMN accept_new BOOLEAN DEFAULT 0")
+
+        # Migration: Add isbn column if it doesn't exist
+        try:
+            cursor.execute("SELECT isbn FROM search_specs LIMIT 1")
+        except sqlite3.OperationalError:
+            logger.info("Adding isbn column to search_specs table")
+            cursor.execute("ALTER TABLE search_specs ADD COLUMN isbn TEXT")
+
+        # Migration: Add max_price column if it doesn't exist
+        try:
+            cursor.execute("SELECT max_price FROM search_specs LIMIT 1")
+        except sqlite3.OperationalError:
+            logger.info("Adding max_price column to search_specs table")
+            cursor.execute("ALTER TABLE search_specs ADD COLUMN max_price REAL")
 
         self.conn.commit()
         logger.info("Database schema initialized")
@@ -282,6 +298,7 @@ class Database:
 
     def upsert_search_spec(self, author: str, title: Optional[str] = None,
                            year: Optional[int] = None, keywords: Optional[str] = None,
+                           isbn: Optional[str] = None, max_price: Optional[float] = None,
                            accept_new: bool = False) -> str:
         """Insert or update a search specification record.
 
@@ -290,6 +307,8 @@ class Database:
             title: Book title (optional)
             year: Publication year (optional)
             keywords: Search keywords (optional)
+            isbn: Book ISBN (optional, takes priority if present)
+            max_price: Maximum price filter (optional)
             accept_new: Accept NEW condition books (default: False)
 
         Returns:
@@ -298,15 +317,17 @@ class Database:
         spec_id = self.generate_search_spec_id(author, title)
         cursor = self.conn.cursor()
         cursor.execute("""
-            INSERT INTO search_specs (spec_id, author, title, publication_year, keywords, accept_new)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO search_specs (spec_id, author, title, publication_year, keywords, isbn, max_price, accept_new)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(spec_id) DO UPDATE SET
                 author = excluded.author,
                 title = excluded.title,
                 publication_year = excluded.publication_year,
                 keywords = excluded.keywords,
+                isbn = excluded.isbn,
+                max_price = excluded.max_price,
                 accept_new = excluded.accept_new
-        """, (spec_id, author, title, year, keywords, accept_new))
+        """, (spec_id, author, title, year, keywords, isbn, max_price, accept_new))
         self.conn.commit()
         logger.debug(f"Upserted search spec: {spec_id} - {author}" +
                     (f" - {title}" if title else "") +
@@ -321,7 +342,7 @@ class Database:
         """
         cursor = self.conn.cursor()
         cursor.execute("""
-            SELECT spec_id, author, title, publication_year, keywords, accept_new, last_checked
+            SELECT spec_id, author, title, publication_year, keywords, isbn, max_price, accept_new, last_checked
             FROM search_specs
             WHERE check_enabled = 1
             ORDER BY author, title

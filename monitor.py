@@ -74,6 +74,8 @@ def sync_search_specs(sheet_id: str, db: Database) -> int:
             title=spec['title'],
             year=spec['year'],
             keywords=spec['keywords'],
+            isbn=spec.get('isbn'),
+            max_price=spec.get('max_price'),
             accept_new=spec.get('accept_new', False)
         )
         synced_count += 1
@@ -87,7 +89,7 @@ def check_search_spec(spec: dict, spec_id: str, scraper: BookFinderScraper,
     """Search BookFinder using search specification and save listings.
 
     Args:
-        spec: Search specification with keys: author, title, year, keywords, accept_new
+        spec: Search specification with keys: author, title, year, keywords, isbn, max_price, accept_new
         spec_id: Search spec ID for tracking
         scraper: BookFinder scraper instance
         db: Database instance
@@ -102,6 +104,8 @@ def check_search_spec(spec: dict, spec_id: str, scraper: BookFinderScraper,
     title = spec.get('title')
     year = spec.get('year')
     keywords = spec.get('keywords')
+    isbn = spec.get('isbn')
+    max_price = spec.get('max_price')
     accept_new = spec.get('accept_new', False)
 
     # Determine filter_condition based on accept_new field
@@ -119,11 +123,22 @@ def check_search_spec(spec: dict, spec_id: str, scraper: BookFinderScraper,
         search_desc += f" ({year})"
     if keywords:
         search_desc += f" [{keywords}]"
+    if isbn:
+        search_desc += f" [ISBN: {isbn}]"
+    if max_price:
+        search_desc += f" [max: ${max_price}]"
 
     logger.info(f"Checking listings for: {search_desc} (condition: {filter_condition})")
 
-    # Choose search strategy based on whether title is provided
-    if title:
+    # Search priority: ISBN → Title+Author → Author-only
+    if isbn:
+        # ISBN provided → direct ISBN search (highest priority)
+        logger.debug(f"Using ISBN search for: {isbn}")
+        listings = scraper.search_by_isbn(
+            isbn=isbn,
+            max_price=max_price
+        )
+    elif title:
         # Title provided → precise search by title + author
         logger.debug(f"Using title+author search for: {title}")
         listings = scraper.search_by_title_author(
@@ -132,17 +147,19 @@ def check_search_spec(spec: dict, spec_id: str, scraper: BookFinderScraper,
             book_id=None,
             year=year,
             keywords=keywords,
-            filter_condition=filter_condition
+            filter_condition=filter_condition,
+            max_price=max_price
         )
     else:
-        # No title → broad search by author only
+        # No title or ISBN → broad search by author only
         logger.debug(f"Using author-only search for: {author}")
         listings = scraper.search_by_author_only(
             author=author,
             author_id=spec_id,
             filter_condition=filter_condition,
             year=year,
-            keywords=keywords
+            keywords=keywords,
+            max_price=max_price
         )
 
     if not listings:
@@ -358,6 +375,8 @@ def main():
                 'title': spec_row.get('title'),
                 'year': spec_row.get('publication_year'),
                 'keywords': spec_row.get('keywords'),
+                'isbn': spec_row.get('isbn'),
+                'max_price': spec_row.get('max_price'),
                 'accept_new': spec_row.get('accept_new', False)
             }
 
@@ -386,21 +405,12 @@ def main():
             logger.info("=" * 80)
 
             # Initialize email client
-            # Try to get email config from config file, fall back to environment variables
-            email_config = config.get('email', {})
-            sender_email = email_config.get('sender_email') or os.environ.get('SENDER_EMAIL')
-            sender_name = email_config.get('sender_name', 'Rare Books Monitor')
-            recipient_email = email_config.get('recipient_email') or os.environ.get('RECIPIENT_EMAIL')
-
-            if not sender_email or not recipient_email:
-                logger.error("Email configuration missing. Set SENDER_EMAIL and RECIPIENT_EMAIL environment variables or configure in config.yaml")
-                raise ValueError("Email addresses not configured")
-
+            email_config = config['email']
             emailer = DigestEmailer(
                 api_key=os.environ.get('BREVO_API_KEY'),
-                sender_email=sender_email,
-                sender_name=sender_name,
-                recipient_email=recipient_email
+                sender_email=email_config['sender_email'],
+                sender_name=email_config['sender_name'],
+                recipient_email=email_config['recipient_email']
             )
 
             send_author_digest(db, emailer)
