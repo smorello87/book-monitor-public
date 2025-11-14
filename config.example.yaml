@@ -1,0 +1,54 @@
+# =============================================================================
+# BOOK MONITOR v2 - Author-Based Rare Books Tracker
+# =============================================================================
+# SETUP INSTRUCTIONS:
+# 1. Copy this file to config.yaml: cp config.example.yaml config.yaml
+# 2. Update google_sheets.sheet_id with your Google Sheets document ID
+# 3. Set email addresses as GitHub Secrets (SENDER_EMAIL, RECIPIENT_EMAIL)
+#    OR uncomment and fill in the email section below for local testing
+# 4. Set BREVO_API_KEY as GitHub Secret or in .env file
+
+# Google Sheets Configuration (v2)
+# -----------------------------------------------------------------------------
+google_sheets:
+  sheet_id: "YOUR_GOOGLE_SHEETS_ID_HERE"  # Get from your sheet URL
+  # Sheet must be "Anyone with link can view" for CSV export
+  # Required columns: Author, Title (optional), Year (optional), Keyword (optional), Accept New (optional)
+  max_specs_per_run: 40  # Max search specifications to check per execution
+
+# Search Configuration (v2)
+# -----------------------------------------------------------------------------
+search:
+  condition_filter: "used"   # Filter: 'used', 'any', 'new' (default: used for rare books)
+  sort_order: "price_desc"   # Sort by price: highest first (highlights rare editions)
+
+# BookFinder Configuration
+# -----------------------------------------------------------------------------
+bookfinder:
+  base_url: "https://www.bookfinder.com"
+  rate_limit_seconds: 10  # Delay between requests (be polite!)
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+  timeout: 30  # Request timeout in seconds
+
+# Email Configuration (Brevo)
+# -----------------------------------------------------------------------------
+# IMPORTANT: For GitHub Actions, set these as GitHub Secrets instead:
+#   - SENDER_EMAIL
+#   - RECIPIENT_EMAIL
+#   - BREVO_API_KEY
+#
+# For local testing, you can uncomment and fill these in:
+# email:
+#   sender_email: "your-email@example.com"  # Verify this email in Brevo first
+#   sender_name: "Rare Books Monitor"
+#   recipient_email: "your-email@example.com"
+
+# Database Configuration
+# -----------------------------------------------------------------------------
+database:
+  path: "data/books.db"
+
+# Monitoring Configuration
+# -----------------------------------------------------------------------------
+monitoring:
+  max_specs_per_run: 40  # Max search specs to check per run

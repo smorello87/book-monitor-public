@@ -1,0 +1,21 @@
+# Core dependencies
+# pyzotero==1.5.18  # ARCHIVED - v1 only (Zotero-based system)
+beautifulsoup4==4.12.3
+requests==2.31.0
+lxml==5.1.0
+
+# Web scraping with JavaScript support
+playwright==1.48.0
+
+# Email delivery
+sib-api-v3-sdk==7.6.0
+
+# Configuration
+pyyaml==6.0.1
+python-dotenv==1.0.1
+
+# Utilities
+python-dateutil==2.8.2
+
+# Google Sheets integration
+pandas>=2.0.0
