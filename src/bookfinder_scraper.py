@@ -218,24 +218,28 @@ class BookFinderScraper:
 
             # Make request
             logger.debug(f"Fetching: {full_url}")
-            response = self.session.get(full_url, timeout=self.timeout)
-            response.raise_for_status()
+            try:
+                response = self.session.get(full_url, timeout=self.timeout)
+                response.raise_for_status()
 
-            # Strategy 1: Try to extract structured data from __NEXT_DATA__ (fast)
-            next_data = self._extract_next_data(response.text)
-            if next_data and 'listings' in next_data:
-                logger.info("Using __NEXT_DATA__ extraction (fast path)")
-                listings = self._parse_listings_from_json(next_data['listings'], clean_isbn)
+                # Strategy 1: Try to extract structured data from __NEXT_DATA__ (fast)
+                next_data = self._extract_next_data(response.text)
+                if next_data and 'listings' in next_data:
+                    logger.info("Using __NEXT_DATA__ extraction (fast path)")
+                    listings = self._parse_listings_from_json(next_data['listings'], clean_isbn)
+                    if listings:
+                        logger.info(f"Found {len(listings)} listings for ISBN {clean_isbn}")
+                        return listings
+
+                # Strategy 2: Fall back to HTML parsing
+                logger.debug("__NEXT_DATA__ not available, using HTML parsing")
+                listings = self._parse_search_results(response.text, clean_isbn)
                 if listings:
                     logger.info(f"Found {len(listings)} listings for ISBN {clean_isbn}")
                     return listings
-
-            # Strategy 2: Fall back to HTML parsing
-            logger.debug("__NEXT_DATA__ not available, using HTML parsing")
-            listings = self._parse_search_results(response.text, clean_isbn)
-            if listings:
-                logger.info(f"Found {len(listings)} listings for ISBN {clean_isbn}")
-                return listings
+            except requests.HTTPError as e:
+                # 405 Method Not Allowed or other HTTP errors - fall back to Playwright
+                logger.warning(f"HTTP request failed ({e.response.status_code}): {e}. Falling back to Playwright...")
 
             # Strategy 3: Fall back to Playwright (slow but handles JavaScript)
             logger.info("No listings found with fast methods, trying Playwright...")
@@ -339,26 +343,30 @@ class BookFinderScraper:
 
             # Make request
             logger.debug(f"Fetching: {full_url}")
-            response = self.session.get(full_url, timeout=self.timeout)
-            response.raise_for_status()
+            try:
+                response = self.session.get(full_url, timeout=self.timeout)
+                response.raise_for_status()
 
-            # Strategy 1: Try to extract structured data from __NEXT_DATA__ (fast)
-            next_data = self._extract_next_data(response.text)
-            if next_data and 'listings' in next_data:
-                logger.info("Using __NEXT_DATA__ extraction (fast path)")
-                listings = self._parse_listings_from_json(next_data['listings'], book_id or title)
+                # Strategy 1: Try to extract structured data from __NEXT_DATA__ (fast)
+                next_data = self._extract_next_data(response.text)
+                if next_data and 'listings' in next_data:
+                    logger.info("Using __NEXT_DATA__ extraction (fast path)")
+                    listings = self._parse_listings_from_json(next_data['listings'], book_id or title)
+                    if listings:
+                        listings = self._filter_by_condition(listings, filter_condition)
+                        logger.info(f"Found {len(listings)} listings for: {title} by {author_lastname or 'unknown author'}")
+                        return listings
+
+                # Strategy 2: Fall back to HTML parsing
+                logger.debug("__NEXT_DATA__ not available, using HTML parsing")
+                listings = self._parse_search_results(response.text, book_id or title)
                 if listings:
                     listings = self._filter_by_condition(listings, filter_condition)
                     logger.info(f"Found {len(listings)} listings for: {title} by {author_lastname or 'unknown author'}")
                     return listings
-
-            # Strategy 2: Fall back to HTML parsing
-            logger.debug("__NEXT_DATA__ not available, using HTML parsing")
-            listings = self._parse_search_results(response.text, book_id or title)
-            if listings:
-                listings = self._filter_by_condition(listings, filter_condition)
-                logger.info(f"Found {len(listings)} listings for: {title} by {author_lastname or 'unknown author'}")
-                return listings
+            except requests.HTTPError as e:
+                # 405 Method Not Allowed or other HTTP errors - fall back to Playwright
+                logger.warning(f"HTTP request failed ({e.response.status_code}): {e}. Falling back to Playwright...")
 
             # Strategy 3: Fall back to Playwright (slow but handles JavaScript)
             logger.info("No listings found with fast methods, trying Playwright...")
@@ -469,26 +477,30 @@ class BookFinderScraper:
 
             # Make request
             logger.debug(f"Fetching: {full_url}")
-            response = self.session.get(full_url, timeout=self.timeout)
-            response.raise_for_status()
+            try:
+                response = self.session.get(full_url, timeout=self.timeout)
+                response.raise_for_status()
 
-            # Strategy 1: Try to extract structured data from __NEXT_DATA__ (fast)
-            next_data = self._extract_next_data(response.text)
-            if next_data and 'listings' in next_data:
-                logger.info("Using __NEXT_DATA__ extraction (fast path)")
-                listings = self._parse_listings_from_json(next_data['listings'], author_id or author)
+                # Strategy 1: Try to extract structured data from __NEXT_DATA__ (fast)
+                next_data = self._extract_next_data(response.text)
+                if next_data and 'listings' in next_data:
+                    logger.info("Using __NEXT_DATA__ extraction (fast path)")
+                    listings = self._parse_listings_from_json(next_data['listings'], author_id or author)
+                    if listings:
+                        listings = self._enhance_and_filter_listings(listings, author, filter_condition)
+                        logger.info(f"Found {len(listings)} listings for author: {author}")
+                        return listings
+
+                # Strategy 2: Fall back to HTML parsing
+                logger.debug("__NEXT_DATA__ not available, using HTML parsing")
+                listings = self._parse_author_search_results(response.text, author)
                 if listings:
                     listings = self._enhance_and_filter_listings(listings, author, filter_condition)
                     logger.info(f"Found {len(listings)} listings for author: {author}")
                     return listings
-
-            # Strategy 2: Fall back to HTML parsing
-            logger.debug("__NEXT_DATA__ not available, using HTML parsing")
-            listings = self._parse_author_search_results(response.text, author)
-            if listings:
-                listings = self._enhance_and_filter_listings(listings, author, filter_condition)
-                logger.info(f"Found {len(listings)} listings for author: {author}")
-                return listings
+            except requests.HTTPError as e:
+                # 405 Method Not Allowed or other HTTP errors - fall back to Playwright
+                logger.warning(f"HTTP request failed ({e.response.status_code}): {e}. Falling back to Playwright...")
 
             # Strategy 3: Fall back to Playwright (slow but handles JavaScript)
             logger.info("No listings found with fast methods, trying Playwright...")
