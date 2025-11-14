@@ -36,8 +36,6 @@ jobs:
       - name: Run rare books monitor (Google Sheets-based)
         env:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
         run: |
           python monitor.py --verbose
 
@@ -51,9 +49,10 @@ jobs:
 
             📚 Google Sheets-based monitoring system (v2)
             - Syncs search specs from Google Sheets
-            - Supports: Author, Title, Year, Keywords
-            - USED books only
+            - Supports: Author, Title, Year, Keywords, ISBN, Price Below
+            - Smart filtering: NEW/USED, Price
             - Sorted by price (highest first)"
+            git pull --rebase
             git push
           else
             echo "No database changes to commit"
