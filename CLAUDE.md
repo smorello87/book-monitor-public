@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ IMPORTANT: Synced from Private Repository
+
+**This is the PUBLIC repository** - safe to share, no personal data.
+
+The maintainer has a PRIVATE repository at `../book-monitor/` with personal configuration.
+
+**For maintainer**: When making code changes:
+1. Make changes in the private repo first
+2. **ALWAYS sync changes to this public repo**:
+   ```bash
+   # After editing src/bookfinder_scraper.py (example):
+   cp ../book-monitor/src/bookfinder_scraper.py src/
+   git add src/bookfinder_scraper.py
+   git commit -m "Your commit message"
+   git push
+   ```
+3. **Do NOT copy**: config.yaml, data/books.db, .env (these contain personal data)
+4. **Do copy**: All `.py` files, requirements.txt, .github/workflows/, documentation
+
+**For contributors**: Fork this repo and make PRs. Changes will be synced to private repo by maintainer.
+
 ## Overview
 
 Book Monitor v2 is an automated rare books listing tracker that monitors BookFinder.com based on search specifications from a Google Sheets document. It sends daily digest emails when new listings appear. The system uses Playwright for web scraping to handle JavaScript-rendered content and supports flexible search criteria: Author (required), Title (optional), Year (optional), and Keywords (optional).
