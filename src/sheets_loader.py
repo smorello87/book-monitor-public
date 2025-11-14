@@ -85,9 +85,16 @@ class SheetsLoader:
                 accept_new = accept_new_raw in ['Y', 'YES', 'TRUE', '1']
 
                 # Parse ISBN column (optional)
-                isbn = str(row.get('ISBN', '')).strip() if pd.notna(row.get('ISBN')) else None
-                if isbn and isbn.lower() == 'nan':
-                    isbn = None
+                isbn_raw = row.get('ISBN')
+                isbn = None
+                if pd.notna(isbn_raw):
+                    # Convert to string and remove any decimal point from pandas float conversion
+                    isbn = str(isbn_raw).strip()
+                    if '.' in isbn and isbn.replace('.', '').isdigit():
+                        # Remove trailing .0 from ISBNs that pandas converted to float
+                        isbn = isbn.split('.')[0]
+                    if isbn.lower() == 'nan' or not isbn:
+                        isbn = None
 
                 # Parse Price Below column (optional)
                 max_price_raw = row.get('Price Below')
