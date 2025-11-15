@@ -20,9 +20,9 @@ There is a PUBLIC repository at `../book-monitor-public/` for sharing with other
    git push
    ```
 3. **Do NOT copy**: config.yaml (has personal emails), data/books.db (has personal searches)
-4. **Do copy**: All `.py` files, requirements.txt, .github/workflows/, documentation
+4. **Do copy**: All `.py` files, requirements.txt, setup_cron.sh, documentation
 
-**Files to sync**: src/*.py, monitor.py, requirements.txt, .github/workflows/, CLAUDE.md, README.md
+**Files to sync**: src/*.py, monitor.py, requirements.txt, setup_cron.sh, CLAUDE.md, README.md
 **Files to NEVER sync**: config.yaml, data/books.db, .env
 Book Monitor v2 is an automated rare books listing tracker that monitors BookFinder.com based on search specifications from a Google Sheets document. It sends daily digest emails when new listings appear. The system uses Playwright for web scraping to handle JavaScript-rendered content and supports flexible search criteria: Author (required), Title (optional), Year (optional), Keywords (optional), ISBN (optional), and Price Below (optional).
 
@@ -278,29 +278,15 @@ crontab -e
 - ❌ Requires computer to be running at scheduled time
 - ❌ Manual setup required
 
-### GitHub Actions (Unreliable - Not Recommended)
+### GitHub Actions (Not Supported)
 
-**Workflow** (`.github/workflows/monitor.yml`):
-- Runs daily at 6 AM UTC (configurable via cron)
-- Uses `ubuntu-latest` runner
-- **Critical step**: `python -m playwright install --with-deps chromium` to install browser
-- Automatically syncs latest search specs from Google Sheets each run
-- Commits database changes back to repository after each run
-- Requires secret: `BREVO_API_KEY`
+**⚠️ Important**: GitHub Actions workflow has been removed from this repository.
 
-**⚠️ Known Issue**: BookFinder blocks GitHub Actions IP addresses
-- GitHub Actions runners use AWS/Azure IP ranges
-- BookFinder's anti-bot detection blocks these cloud IPs
+**Why removed**:
+- BookFinder.com blocks GitHub Actions IP addresses (AWS/Azure cloud ranges)
 - Results in 0 listings found with error: `Page appears to contain blocking/captcha content!`
-- Blocking is consistent (not intermittent)
-- HTTP requests return 405 errors, Playwright fallback gets block page (9760 chars)
-
-**When it might work**:
-- Occasionally gets a "clean" IP from runner pool
-- May work for 1-2 runs then get blocked
-- Unreliable for production use
-
-**Recommendation**: Use local cron job instead of GitHub Actions for reliable operation.
+- Blocking is consistent and unreliable for production use
+- Local cron job deployment is the only supported method
 
 ## Common Issues
 
