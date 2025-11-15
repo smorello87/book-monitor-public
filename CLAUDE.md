@@ -2,29 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ⚠️ IMPORTANT: Synced from Private Repository
+## ⚠️ IMPORTANT: Public Repository Sync
 
-**This is the PUBLIC repository** - safe to share, no personal data.
+**This is a PRIVATE repository** with personal data (config.yaml, books.db).
 
-The maintainer has a PRIVATE repository at `../book-monitor/` with personal configuration.
+There is a PUBLIC repository at `../book-monitor-public/` for sharing with others.
 
-**For maintainer**: When making code changes:
-1. Make changes in the private repo first
-2. **ALWAYS sync changes to this public repo**:
+**CRITICAL**: When making changes to code in `src/` or `monitor.py`:
+1. Make changes in this private repo first
+2. **ALWAYS sync the same changes to the public repo**:
    ```bash
    # After editing src/bookfinder_scraper.py (example):
-   cp ../book-monitor/src/bookfinder_scraper.py src/
+   cp src/bookfinder_scraper.py ../book-monitor-public/src/
+   cd ../book-monitor-public
    git add src/bookfinder_scraper.py
-   git commit -m "Your commit message"
+   git commit -m "Your commit message here"
    git push
    ```
-3. **Do NOT copy**: config.yaml, data/books.db, .env (these contain personal data)
+3. **Do NOT copy**: config.yaml (has personal emails), data/books.db (has personal searches)
 4. **Do copy**: All `.py` files, requirements.txt, .github/workflows/, documentation
 
-**For contributors**: Fork this repo and make PRs. Changes will be synced to private repo by maintainer.
-
-## Overview
-
+**Files to sync**: src/*.py, monitor.py, requirements.txt, .github/workflows/, CLAUDE.md, README.md
+**Files to NEVER sync**: config.yaml, data/books.db, .env
 Book Monitor v2 is an automated rare books listing tracker that monitors BookFinder.com based on search specifications from a Google Sheets document. It sends daily digest emails when new listings appear. The system uses Playwright for web scraping to handle JavaScript-rendered content and supports flexible search criteria: Author (required), Title (optional), Year (optional), Keywords (optional), ISBN (optional), and Price Below (optional).
 
 **Version History**:
@@ -246,7 +245,40 @@ sqlite3 data/books.db "SELECT COUNT(*) FROM listings WHERE notified = 0;"
 **Archived v1 settings** (not used in v2):
 - `zotero.library_id`, `zotero.library_type` - for v1 Zotero-based system only
 
-## GitHub Actions Deployment
+## Deployment Options
+
+### Local Cron Job (Recommended)
+
+**Why Local**: BookFinder.com blocks requests from GitHub Actions IP addresses (AWS/Azure cloud ranges), resulting in 0 listings found. Local deployment from residential IPs works reliably.
+
+**Setup**:
+```bash
+# Automatic setup
+./setup_cron.sh
+
+# Or manual crontab configuration
+crontab -e
+# Add environment variables and cron job (see setup_cron.sh)
+```
+
+**Cron job runs**:
+- Daily at 6 AM local time
+- Logs to `logs/monitor_YYYYMMDD.log`
+- Uses local Python and Playwright installation
+
+**Performance**: ~2-5 minutes per run depending on number of search specs
+
+**Advantages**:
+- ✅ Works reliably (not blocked by BookFinder)
+- ✅ Faster (no Docker/runner overhead)
+- ✅ Better control over timing
+- ✅ Local log files for debugging
+
+**Disadvantages**:
+- ❌ Requires computer to be running at scheduled time
+- ❌ Manual setup required
+
+### GitHub Actions (Unreliable - Not Recommended)
 
 **Workflow** (`.github/workflows/monitor.yml`):
 - Runs daily at 6 AM UTC (configurable via cron)
@@ -256,7 +288,19 @@ sqlite3 data/books.db "SELECT COUNT(*) FROM listings WHERE notified = 0;"
 - Commits database changes back to repository after each run
 - Requires secret: `BREVO_API_KEY`
 
-**Performance**: ~2-5 minutes per run depending on number of search specs
+**⚠️ Known Issue**: BookFinder blocks GitHub Actions IP addresses
+- GitHub Actions runners use AWS/Azure IP ranges
+- BookFinder's anti-bot detection blocks these cloud IPs
+- Results in 0 listings found with error: `Page appears to contain blocking/captcha content!`
+- Blocking is consistent (not intermittent)
+- HTTP requests return 405 errors, Playwright fallback gets block page (9760 chars)
+
+**When it might work**:
+- Occasionally gets a "clean" IP from runner pool
+- May work for 1-2 runs then get blocked
+- Unreliable for production use
+
+**Recommendation**: Use local cron job instead of GitHub Actions for reliable operation.
 
 ## Common Issues
 

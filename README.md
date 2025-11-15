@@ -1,236 +1,516 @@
-# 📚 Book Monitor
+# Rare Books Monitor 📚
 
-Automated monitoring system for book listings on BookFinder.com. Get daily email digests when new listings appear for books you're tracking.
+Automated rare books listing tracker that monitors BookFinder.com based on search criteria defined in a Google Sheets document. Sends daily digest emails when new listings appear.
+
+**Version 2**: Google Sheets-based flexible search system
+**Version 1** (archived): Zotero library-based system → see `archive/v1-zotero/`
+
+## What It Does
+
+This system automatically:
+1. ✅ Reads search specifications from a **Google Sheets** document
+2. ✅ Searches **BookFinder.com** for books matching your criteria
+3. ✅ Filters to **USED condition** books only (configurable)
+4. ✅ Tracks listings in a **SQLite database** to detect new ones
+5. ✅ Sends **daily email digests** with new findings
+6. ✅ Runs **automatically via GitHub Actions** (no server needed)
 
 ## Features
 
-- **📊 Google Sheets Integration** - Manage your book searches from a simple spreadsheet
-- **🔍 Flexible Search** - Search by author, title, year, keywords, ISBN, or price range
-- **📧 Email Digests** - Daily notifications when new listings appear
-- **🤖 GitHub Actions** - Runs automatically, no server needed
-- **💾 Persistent Tracking** - Remembers what you've seen, no duplicate notifications
-- **🎯 Smart Filtering** - Choose NEW, USED, or both; filter by price
+- 📊 **Google Sheets Integration**: Define searches in a spreadsheet (Author, Title, Year, Keywords)
+- 🔍 **Flexible Search**: Search by author only, or combine with title/year/keywords
+- 🎯 **Smart Filtering**: Only shows books by the EXACT author (prevents false matches)
+- 📧 **Daily Digests**: Beautiful HTML emails grouped by author
+- 💾 **Deduplication**: Tracks seen listings to avoid spam
+- ☁️ **GitHub Actions**: Runs daily at 6 AM UTC automatically
+- 🌐 **Playwright Scraping**: Handles JavaScript-rendered pages reliably
+- 🕐 **Rate Limited**: Polite 10-second delays between requests
 
-## Quick Setup
+## Project Structure
 
-### 1. Fork This Repository
+```
+book-monitor/
+├── .github/workflows/
+│   └── monitor.yml              # GitHub Actions (runs daily at 6 AM UTC)
+├── src/
+│   ├── sheets_loader.py         # 📊 Google Sheets CSV reader
+│   ├── bookfinder_scraper.py    # 🔍 BookFinder.com scraper (Playwright)
+│   ├── database.py              # 💾 SQLite operations
+│   └── digest.py                # 📧 Email generation (Brevo API)
+├── archive/v1-zotero/           # 📦 Old Zotero-based system
+├── data/
+│   └── books.db                 # SQLite database (auto-created)
+├── config.yaml                  # ⚙️ Configuration
+├── monitor.py                   # 🚀 Main script
+└── requirements.txt             # Python dependencies
+```
 
-Click the "Fork" button at the top right of this page.
+## Prerequisites
 
-### 2. Create Your Google Sheet
+1. **Google Sheets**: A public Google Sheets document with search criteria
+2. **Brevo Account**: Free email service (300 emails/day free tier)
+3. **GitHub Repository**: For automated daily runs via GitHub Actions
 
-1. Create a new Google Sheet with these columns (only **Author** is required):
+## Quick Start
 
-| Author | Title | Year | Keyword | Accept New | Price Below | ISBN |
-|--------|-------|------|---------|------------|-------------|------|
-| Jack Kerouac | On the Road | | | Y | 20 | |
-| Jack Kerouac | | | | | 15 | |
-| Eric Lott | | | | | | 9780195320558 |
+### 1. Create Your Google Sheets Document
 
-**Column Guide:**
-- **Author** (required): Full author name
-- **Title** (optional): Specific book title, or leave blank for all books by author
-- **Year** (optional): Publication year filter
-- **Keyword** (optional): Additional search keywords
-- **Accept New** (optional): Y to include NEW books, blank for USED only
-- **Price Below** (optional): Only show listings under this price
-- **ISBN** (optional): Search by ISBN (takes priority over all other fields)
+1. **Copy the template**: [Example Google Sheet](https://docs.google.com/spreadsheets/d/1wnGY6o-uRGw1vsxPb6MzN44KxvnK5MeRTA5Mn6DmTXo/edit?usp=sharing)
+2. **Make it public**: Share → "Anyone with the link" → Viewer
+3. **Add your searches**: Fill in the columns (see format below)
 
-2. Make your sheet public:
-   - Click **Share** → **Anyone with the link** → **Viewer**
+**Required Columns:**
+- `Author` - Full author name (e.g., "Bernardino Ciambelli") **REQUIRED**
 
-3. Copy your Sheet ID from the URL:
-   ```
-   https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID_HERE/edit
-   ```
+**Optional Columns:**
+- `Title` - Specific book title (leave blank to search all books by author)
+- `Year` - Publication year (filters to that year only)
+- `Keyword` - Additional search keywords
 
-### 3. Set Up Email (Brevo)
+**Example Sheet:**
 
-1. Sign up for a free [Brevo account](https://www.brevo.com/)
-2. Verify your sender email address in Brevo dashboard
-3. Generate an API key:
-   - Go to **Settings** → **API Keys** → **Create a new API key**
-   - Copy the key (starts with `xkeysib-...`)
+| Author | Title | Year | Keyword |
+|--------|-------|------|---------|
+| Bernardino Ciambelli | | | |
+| Andre Luotto | Anima Italiana | | |
+| Giovanni Verga | I Malavoglia | 1881 | |
 
-### 4. Configure GitHub Secrets
+4. **Get the Sheet ID**: From the URL `https://docs.google.com/spreadsheets/d/SHEET_ID/edit`
 
-In your forked repository:
+### 2. Set Up Brevo Email Service
 
-1. Go to **Settings** → **Secrets and variables** → **Actions**
-2. Add these secrets:
+1. Create free account at [Brevo](https://www.brevo.com/)
+2. Go to **SMTP & API** → **API Keys** → Create new key
+3. **Copy the API key** (starts with `xkeysib-`)
+4. **Verify your sender email** in Brevo dashboard
 
-| Secret Name | Value | Example |
-|-------------|-------|---------|
-| `BREVO_API_KEY` | Your Brevo API key | `xkeysib-abc123...` |
-| `SENDER_EMAIL` | Your verified email | `you@gmail.com` |
-| `RECIPIENT_EMAIL` | Where to send digest | `you@gmail.com` |
-| `GOOGLE_SHEETS_ID` | Your Sheet ID | `1wnGY6o-uRGw1...` |
+### 3. Fork This Repository
 
-### 5. Enable GitHub Actions
+1. Click **Fork** button on GitHub
+2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/book-monitor.git`
 
-1. Go to **Actions** tab in your repository
-2. Click "I understand my workflows, go ahead and enable them"
+### 4. Configure Your Settings
 
-### 6. Test Your Setup
+Edit `config.yaml`:
 
-#### Option A: Manual Test Run
-1. Go to **Actions** → **Book Monitor** workflow
-2. Click **Run workflow** → **Run workflow**
-3. Check for email within 5 minutes
+```yaml
+# Google Sheets Configuration
+google_sheets:
+  sheet_id: "YOUR_SHEET_ID"  # From your Google Sheets URL
 
-#### Option B: Wait for Scheduled Run
-The workflow runs automatically every day at 6 AM UTC.
+# Email Configuration (Brevo)
+email:
+  sender_email: "your-verified-email@example.com"  # Must be verified in Brevo
+  sender_name: "Rare Books Monitor"
+  recipient_email: "your-email@example.com"        # Where to receive digests
+
+# Search Configuration
+search:
+  condition_filter: "used"    # Filter: 'used', 'any', or 'new'
+  sort_order: "price_desc"    # Highest price first (rare editions)
+
+# BookFinder Configuration
+bookfinder:
+  rate_limit_seconds: 10      # Be polite! (10 seconds between requests)
+  timeout: 30
+
+# Monitoring Configuration
+monitoring:
+  max_specs_per_run: 40       # Max searches to check per run
+```
+
+### 5. Local Testing (Optional)
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+python -m playwright install chromium
+
+# Set API key
+export BREVO_API_KEY="your-brevo-api-key"
+
+# Test Google Sheets connection
+python monitor.py --test
+
+# Run full check (won't send email with --no-email)
+python monitor.py --verbose --no-email
+```
+
+### 6A. Deploy Locally with Cron (Recommended)
+
+**⚠️ GitHub Actions Note**: BookFinder.com blocks requests from GitHub Actions IP addresses, resulting in 0 listings found. **Local deployment is more reliable.**
+
+#### Automatic Setup
+
+```bash
+# Run the setup script
+./setup_cron.sh
+```
+
+The script will guide you through:
+1. Setting environment variables in crontab
+2. Adding the cron job (runs daily at 6 AM)
+3. Creating log directory
+
+#### Manual Setup
+
+1. **Install dependencies**:
+```bash
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+2. **Open crontab editor**:
+```bash
+crontab -e
+```
+
+3. **Add environment variables** (at the top):
+```bash
+BREVO_API_KEY=xkeysib-your_api_key_here
+SENDER_EMAIL=your-verified-email@example.com
+RECIPIENT_EMAIL=your-email@example.com
+GOOGLE_SHEETS_ID=1wnGY6o-uRGw1vsxPb6MzN44KxvnK5MeRTA5Mn6DmTXo
+```
+
+4. **Add cron job** (runs daily at 6 AM):
+```bash
+0 6 * * * cd /path/to/book-monitor && /usr/local/bin/python3 monitor.py --verbose >> /path/to/book-monitor/logs/monitor_$(date +\%Y\%m\%d).log 2>&1
+```
+
+5. **Save and verify**:
+```bash
+crontab -l
+```
+
+#### Viewing Logs
+
+```bash
+# Today's log
+tail -f logs/monitor_$(date +%Y%m%d).log
+
+# All logs
+ls -lh logs/
+```
+
+That's it! The system will now:
+- ✅ Run daily at 6 AM from your local machine
+- ✅ Check your Google Sheet for searches
+- ✅ Search BookFinder for each author/title
+- ✅ Email you a digest of new listings
+- ✅ Store results in the database
+
+### 6B. Deploy to GitHub Actions (Unreliable)
+
+**⚠️ Warning**: BookFinder blocks GitHub Actions IP addresses. This deployment method may return 0 results. Use local cron (6A) instead.
+
+<details>
+<summary>Show GitHub Actions Setup (Not Recommended)</summary>
+
+#### Add GitHub Secret
+
+1. Go to your forked repo → **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `BREVO_API_KEY`
+4. Value: Your Brevo API key (starts with `xkeysib-`)
+5. Click **Add secret**
+
+#### Enable Workflow
+
+1. Go to **Actions** tab → **I understand my workflows, go ahead and enable them**
+2. The workflow will run **daily at 6 AM UTC**
+3. Or manually trigger: **Actions** → **Rare Books Monitor** → **Run workflow**
+
+**Known Issue**: GitHub Actions runs may find 0 listings due to IP blocking by BookFinder. Check logs for:
+```
+[ERROR] bookfinder_scraper: Page appears to contain blocking/captcha content!
+```
+
+If you see this, use local cron deployment (6A) instead.
+
+</details>
 
 ## How It Works
 
-### Search Priority
+### Search Strategies
 
-When you add a row to your Google Sheet, the system searches in this order:
+The system uses two different approaches based on your Google Sheet entries:
 
-1. **ISBN** (if provided) → Uses `/isbn/{isbn}/` endpoint
-2. **Title + Author** (if title provided) → Precise search
-3. **Author only** (if no title) → All books by that author
+**1. Author + Title Search** (when title is provided):
+```
+Search: "Andre Luotto" + "Anima Italiana"
+→ Finds specific book by that exact author
+→ Filters out other Luottos (James, P., etc.)
+```
 
-### Example Searches
+**2. Author-Only Search** (when title is blank):
+```
+Search: "Bernardino Ciambelli" + (no title)
+→ Finds ALL books by Bernardino Ciambelli
+→ Filters out Pietro Ciambelli, Lea Ciambelli, etc.
+```
 
-| Configuration | What It Does |
-|--------------|--------------|
-| Author: "Jack Kerouac"<br>Title: blank | Find all books by Jack Kerouac (USED only) |
-| Author: "Jack Kerouac"<br>Title: "On the Road" | Find only "On the Road" by Kerouac |
-| Author: "Jack Kerouac"<br>Accept New: Y | Include NEW condition books |
-| Author: "Jack Kerouac"<br>Price Below: 15 | Only show books under $15 |
-| Author: "Eric Lott"<br>ISBN: 9780195320558 | Search by ISBN (ignores title) |
+**Critical**: The system uses FULL author names and verifies each listing against the actual author to prevent false matches.
 
-### Email Digest
+### Daily Workflow
 
-You'll receive a daily email with:
-- New listings grouped by author
-- Book title, seller, price, condition
-- Direct links to each listing
-- Sorted by price (highest first)
+1. **6 AM UTC**: GitHub Actions triggers
+2. **Sync**: Loads latest search specs from your Google Sheet
+3. **Search**: For each row, searches BookFinder.com
+4. **Filter**: Keeps only USED books by the EXACT author
+5. **Deduplicate**: Compares with database to find new listings
+6. **Email**: Sends digest grouped by author
+7. **Commit**: Saves database back to GitHub
+
+## Usage
+
+### Adding New Searches
+
+Just edit your Google Sheet! The system checks it every day.
+
+**Example**: Want to monitor Giovanni Verga?
+1. Open your Google Sheet
+2. Add new row: `Giovanni Verga | I Malavoglia | 1881 | `
+3. Done! Next run will include it.
+
+### Manual Commands (Local)
+
+```bash
+# Full run (sync + check + email)
+python monitor.py
+
+# Test connections
+python monitor.py --test
+
+# Sync Google Sheet only
+python monitor.py --sync-only
+
+# Check listings only (skip sync)
+python monitor.py --check-only
+
+# Run without email
+python monitor.py --no-email
+
+# Search for ANY condition (not just used)
+python monitor.py --condition any
+
+# Verbose logging
+python monitor.py --verbose
+```
+
+## For Collaborators: How to Adapt This System
+
+### Use Case 1: Monitor Different Book Sources
+
+Replace `bookfinder_scraper.py` with scrapers for:
+- **AbeBooks**: Similar structure, different selectors
+- **Alibris**: Use their search API if available
+- **Open Library**: Official API available
+
+**Key files to modify:**
+- `src/bookfinder_scraper.py` - Scraping logic
+- `src/database.py` - May need additional fields
+- `config.yaml` - Add new source configuration
+
+### Use Case 2: Different Notification Methods
+
+Replace `digest.py` with:
+- **Slack**: Post to channel via webhook
+- **Discord**: Send to Discord server
+- **Telegram**: Use Telegram Bot API
+- **SMS**: Twilio integration
+
+**Key file to modify:**
+- `src/digest.py` - Notification delivery
+
+### Use Case 3: Track Other Items
+
+Adapt for non-book items:
+- **Vintage records/vinyl**
+- **Rare coins**
+- **Collectible stamps**
+- **Antique furniture**
+
+**Key changes needed:**
+- Google Sheet structure (add relevant fields)
+- Search parameters in `bookfinder_scraper.py`
+- Email template in `digest.py`
+
+### Use Case 4: Price Alerts
+
+Add price threshold alerts:
+
+```python
+# In digest.py, filter listings:
+def get_below_threshold_listings(listings, max_price):
+    return [l for l in listings if l['price'] <= max_price]
+```
+
+## Email Digest Format
+
+HTML email with:
+- **Grouped by author** (e.g., "Andre Luotto", "Bernardino Ciambelli")
+- Each listing shows: Title, Seller, Price, Condition, Link
+- Sorted by price (highest first for rare editions)
+
+## For Developers: Technical Details
+
+### Database Schema
+
+**search_specs** (v2 Google Sheets system):
+- `spec_id`, `author`, `title`, `publication_year`, `keywords`
+
+**books**:
+- `book_id` (hash of title+author), `title`, `author`, `publication_year`
+
+**listings**:
+- `listing_hash`, `book_id`, `seller`, `price`, `currency`, `condition`, `url`, `notified`
+
+### Key Files
+
+- `src/sheets_loader.py` - Google Sheets CSV parser (pandas)
+- `src/bookfinder_scraper.py` - Web scraper (Playwright + BeautifulSoup)
+- `src/database.py` - SQLite ORM with hash-based deduplication
+- `src/digest.py` - Email generation (Brevo REST API)
+- `monitor.py` - Main orchestration script
 
 ## Customization
 
-### Change Schedule
+### Change Check Frequency
 
 Edit `.github/workflows/monitor.yml`:
 
 ```yaml
-schedule:
-  - cron: '0 6 * * *'  # Daily at 6 AM UTC
-  # Change to '0 18 * * *' for 6 PM UTC
-  # Change to '0 */6 * * *' for every 6 hours
+on:
+  schedule:
+    - cron: '0 6 * * *'    # 6 AM UTC daily
+    - cron: '0 18 * * *'   # 6 PM UTC daily (run twice a day)
 ```
 
-### Change Rate Limiting
+Cron syntax: `minute hour day month weekday`
+- Every 12 hours: `0 */12 * * *`
+- Weekly (Monday 8 AM): `0 8 * * 1`
 
-Edit `config.example.yaml` then copy to `config.yaml`:
+### Search for NEW or ANY Condition
+
+In `config.yaml`:
+
+```yaml
+search:
+  condition_filter: "new"    # Options: used, new, any
+```
+
+### Adjust Rate Limiting
+
+Be more polite to BookFinder:
 
 ```yaml
 bookfinder:
-  rate_limit_seconds: 10  # Wait time between requests
-  # Increase to 15-20 to be more polite to BookFinder
+  rate_limit_seconds: 15     # 15 seconds between requests
 ```
 
-### Limit Books Checked Per Run
+### Limit Searches Per Run
+
+Process fewer specs to avoid timeouts:
 
 ```yaml
 monitoring:
-  max_specs_per_run: 40  # Check only first 40 rows
+  max_specs_per_run: 20      # Check only 20 searches per run
 ```
 
 ## Troubleshooting
 
-### Not Receiving Emails?
+### Google Sheets Not Loading
 
-1. Check GitHub Actions logs: **Actions** → Latest workflow run
-2. Verify Brevo API key is correct (starts with `xkeysib-`)
-3. Verify sender email is verified in Brevo dashboard
-4. Check spam folder
+- **Check sharing**: Sheet must be "Anyone with link can view"
+- **Verify Sheet ID**: From URL `/d/SHEET_ID/edit`
+- **Column names**: Must be exactly `Author`, `Title`, `Year`, `Keyword`
 
-### No Listings Found?
+### Wrong Author Results
 
-- BookFinder may not have listings for that book/author
-- Try broader search (remove title, search by author only)
-- Check Google Sheet has correct author name spelling
+- **Use full name**: "Bernardino Ciambelli" not "Ciambelli"
+- **Leave title blank**: To search all books by author
+- **Add title**: For specific book searches
 
-### GitHub Actions Not Running?
+### No Listings Found
 
-1. Ensure Actions are enabled: **Settings** → **Actions** → **Allow all actions**
-2. Check workflow file exists: `.github/workflows/monitor.yml`
-3. Verify secrets are set correctly
+- BookFinder may have no listings for that author/book
+- Try searching BookFinder.com manually first
+- Check verbose logs: `python monitor.py --verbose`
 
-### Database Not Updating?
+### Email Not Received
 
-The `data/books.db` file is automatically updated and committed after each run. Check:
-1. GitHub Actions has write permissions
-2. Workflow completes successfully (green checkmark)
+- Check spam/junk folder
+- Verify sender email in Brevo dashboard
+- Check GitHub Actions logs for errors
+- Ensure `BREVO_API_KEY` starts with `xkeysib-` (not `xsmtpsib-`)
 
-## Local Development
+### GitHub Actions Failing
 
-Want to run it on your computer?
+- Go to **Actions** tab → click failed run → view logs
+- Common issues:
+  - Missing `BREVO_API_KEY` secret
+  - Google Sheet not public
+  - Playwright installation failed (should auto-install)
 
-```bash
-# 1. Clone your fork
-git clone https://github.com/YOUR_USERNAME/book-monitor-public.git
-cd book-monitor-public
+## Legal & Ethical Considerations
 
-# 2. Install dependencies
-pip install -r requirements.txt
-python -m playwright install chromium
+⚠️ **Important**: Web scraping considerations:
 
-# 3. Copy config template
-cp config.example.yaml config.yaml
+- **Personal use only**: This tool is for monitoring YOUR personal rare book searches
+- **Rate limiting**: 10+ second delays between requests (configurable)
+- **No commercialization**: Do not sell or redistribute scraped data
+- **Robots.txt**: BookFinder's robots.txt discourages automated search access
+- **Alternative**: Consider official APIs when available (Open Library, Google Books)
 
-# 4. Edit config.yaml with your settings
+**Best practices:**
+- Use generous rate limiting (15+ seconds)
+- Limit searches per run (`max_specs_per_run: 20`)
+- Monitor during off-peak hours only
 
-# 5. Set environment variables
-export BREVO_API_KEY="xkeysib-..."
-export SENDER_EMAIL="you@gmail.com"
-export RECIPIENT_EMAIL="you@gmail.com"
+## Cost Analysis
 
-# 6. Run
-python monitor.py --verbose
-```
+**100% Free** for typical usage:
 
-## Advanced Features
+| Service | Free Tier | Typical Usage | Cost |
+|---------|-----------|---------------|------|
+| GitHub Actions | 2,000 min/month | ~3 min/day = 90 min/month | $0 |
+| Brevo Email | 300 emails/day | 1 email/day | $0 |
+| Google Sheets | Unlimited | 1 sheet | $0 |
+| **Total** | | | **$0/month** |
 
-### Test Mode
+## Version History
 
-```bash
-# Test connections without searching
-python monitor.py --test
-```
+- **v2 (Current)**: Google Sheets-based flexible search system
+  - Support for Author, Title, Year, Keywords
+  - Smart author filtering to prevent false matches
+  - Daily automated monitoring via GitHub Actions
 
-### Sync Only
+- **v1 (Archived)**: Zotero library-based system → `archive/v1-zotero/`
 
-```bash
-# Update database from Google Sheets without searching
-python monitor.py --sync-only
-```
+## Contributing
 
-### No Email
-
-```bash
-# Search but don't send email
-python monitor.py --no-email
-```
-
-## Architecture
-
-- **monitor.py**: Main script (sync → search → email)
-- **src/sheets_loader.py**: Reads Google Sheets CSV
-- **src/bookfinder_scraper.py**: Web scraper with Playwright fallback
-- **src/database.py**: SQLite persistence
-- **src/digest.py**: Email generation via Brevo
-
-See [CLAUDE.md](CLAUDE.md) for detailed technical documentation.
+Contributions welcome! Ideas:
+- **Additional sources**: AbeBooks, Alibris, Open Library APIs
+- **Price tracking**: Historical price charts
+- **Multiple sheets**: Support monitoring multiple Google Sheets
+- **Webhooks**: Slack, Discord, Telegram notifications
+- **Web dashboard**: Manage searches via web interface
 
 ## License
 
-MIT License - See [LICENSE](LICENSE)
+MIT License - Free for personal and educational use
 
-## Support
+## Acknowledgments
 
-- **Issues**: [GitHub Issues](https://github.com/smorello87/book-monitor-public/issues)
-- **Documentation**: See [SETUP.md](SETUP.md) and [CLAUDE.md](CLAUDE.md)
+Built with:
+- [Playwright](https://playwright.dev/python/) - JavaScript-rendered web scraping
+- [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) - HTML parsing
+- [Pandas](https://pandas.pydata.org/) - CSV data processing
+- [Brevo](https://www.brevo.com/) - Email delivery (formerly SendinBlue)
+
+---
+
+**Questions?** Open an issue or check the [CLAUDE.md](CLAUDE.md) for technical details.
+
+**Happy rare book hunting!** 📚✨
