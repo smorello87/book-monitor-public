@@ -13,7 +13,7 @@ This system automatically:
 3. ✅ Filters to **USED condition** books only (configurable)
 4. ✅ Tracks listings in a **SQLite database** to detect new ones
 5. ✅ Sends **daily email digests** with new findings
-6. ✅ Runs **automatically via GitHub Actions** (no server needed)
+6. ✅ Runs **automatically via local cron job** (no server needed)
 
 ## Features
 
@@ -22,7 +22,7 @@ This system automatically:
 - 🎯 **Smart Filtering**: Only shows books by the EXACT author (prevents false matches)
 - 📧 **Daily Digests**: Beautiful HTML emails grouped by author
 - 💾 **Deduplication**: Tracks seen listings to avoid spam
-- ☁️ **GitHub Actions**: Runs daily at 6 AM UTC automatically
+- ⏰ **Automated Scheduling**: Runs daily via local cron job
 - 🌐 **Playwright Scraping**: Handles JavaScript-rendered pages reliably
 - 🕐 **Rate Limited**: Polite 10-second delays between requests
 
@@ -30,8 +30,6 @@ This system automatically:
 
 ```
 book-monitor/
-├── .github/workflows/
-│   └── monitor.yml              # GitHub Actions (runs daily at 6 AM UTC)
 ├── src/
 │   ├── sheets_loader.py         # 📊 Google Sheets CSV reader
 │   ├── bookfinder_scraper.py    # 🔍 BookFinder.com scraper (Playwright)
@@ -40,8 +38,10 @@ book-monitor/
 ├── archive/v1-zotero/           # 📦 Old Zotero-based system
 ├── data/
 │   └── books.db                 # SQLite database (auto-created)
+├── logs/                        # Cron job logs (auto-created)
 ├── config.yaml                  # ⚙️ Configuration
 ├── monitor.py                   # 🚀 Main script
+├── setup_cron.sh                # 🔧 Automated cron setup script
 └── requirements.txt             # Python dependencies
 ```
 
@@ -49,7 +49,8 @@ book-monitor/
 
 1. **Google Sheets**: A public Google Sheets document with search criteria
 2. **Brevo Account**: Free email service (300 emails/day free tier)
-3. **GitHub Repository**: For automated daily runs via GitHub Actions
+3. **Python 3.7+**: For running the monitor script
+4. **Cron or Task Scheduler**: For automated daily runs (built into macOS/Linux)
 
 ## Quick Start
 
@@ -84,10 +85,12 @@ book-monitor/
 3. **Copy the API key** (starts with `xkeysib-`)
 4. **Verify your sender email** in Brevo dashboard
 
-### 3. Fork This Repository
+### 3. Clone This Repository
 
-1. Click **Fork** button on GitHub
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/book-monitor.git`
+```bash
+git clone https://github.com/YOUR_USERNAME/book-monitor.git
+cd book-monitor
+```
 
 ### 4. Configure Your Settings
 
@@ -119,13 +122,19 @@ monitoring:
   max_specs_per_run: 40       # Max searches to check per run
 ```
 
-### 5. Local Testing (Optional)
+### 5. Install Dependencies
 
 ```bash
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
-python -m playwright install chromium
 
+# Install Playwright browser (required for web scraping)
+python -m playwright install chromium
+```
+
+### 6. Test the Setup
+
+```bash
 # Set API key
 export BREVO_API_KEY="your-brevo-api-key"
 
@@ -136,9 +145,7 @@ python monitor.py --test
 python monitor.py --verbose --no-email
 ```
 
-### 6A. Deploy Locally with Cron (Recommended)
-
-**⚠️ GitHub Actions Note**: BookFinder.com blocks requests from GitHub Actions IP addresses, resulting in 0 listings found. **Local deployment is more reliable.**
+### 7. Set Up Automated Daily Runs
 
 #### Automatic Setup
 
@@ -200,36 +207,6 @@ That's it! The system will now:
 - ✅ Email you a digest of new listings
 - ✅ Store results in the database
 
-### 6B. Deploy to GitHub Actions (Unreliable)
-
-**⚠️ Warning**: BookFinder blocks GitHub Actions IP addresses. This deployment method may return 0 results. Use local cron (6A) instead.
-
-<details>
-<summary>Show GitHub Actions Setup (Not Recommended)</summary>
-
-#### Add GitHub Secret
-
-1. Go to your forked repo → **Settings** → **Secrets and variables** → **Actions**
-2. Click **New repository secret**
-3. Name: `BREVO_API_KEY`
-4. Value: Your Brevo API key (starts with `xkeysib-`)
-5. Click **Add secret**
-
-#### Enable Workflow
-
-1. Go to **Actions** tab → **I understand my workflows, go ahead and enable them**
-2. The workflow will run **daily at 6 AM UTC**
-3. Or manually trigger: **Actions** → **Rare Books Monitor** → **Run workflow**
-
-**Known Issue**: GitHub Actions runs may find 0 listings due to IP blocking by BookFinder. Check logs for:
-```
-[ERROR] bookfinder_scraper: Page appears to contain blocking/captcha content!
-```
-
-If you see this, use local cron deployment (6A) instead.
-
-</details>
-
 ## How It Works
 
 ### Search Strategies
@@ -254,13 +231,13 @@ Search: "Bernardino Ciambelli" + (no title)
 
 ### Daily Workflow
 
-1. **6 AM UTC**: GitHub Actions triggers
+1. **6 AM Local**: Cron job triggers
 2. **Sync**: Loads latest search specs from your Google Sheet
 3. **Search**: For each row, searches BookFinder.com
 4. **Filter**: Keeps only USED books by the EXACT author
 5. **Deduplicate**: Compares with database to find new listings
 6. **Email**: Sends digest grouped by author
-7. **Commit**: Saves database back to GitHub
+7. **Save**: Updates local database with results
 
 ## Usage
 
@@ -378,18 +355,20 @@ HTML email with:
 
 ### Change Check Frequency
 
-Edit `.github/workflows/monitor.yml`:
+Edit your crontab (`crontab -e`):
 
-```yaml
-on:
-  schedule:
-    - cron: '0 6 * * *'    # 6 AM UTC daily
-    - cron: '0 18 * * *'   # 6 PM UTC daily (run twice a day)
+```bash
+# Run twice daily (6 AM and 6 PM)
+0 6,18 * * * cd /path/to/book-monitor && python3 monitor.py --verbose >> /path/to/book-monitor/logs/monitor_$(date +\%Y\%m\%d).log 2>&1
+
+# Run every 12 hours
+0 */12 * * * cd /path/to/book-monitor && python3 monitor.py --verbose >> /path/to/book-monitor/logs/monitor_$(date +\%Y\%m\%d).log 2>&1
+
+# Run weekly (Monday 8 AM)
+0 8 * * 1 cd /path/to/book-monitor && python3 monitor.py --verbose >> /path/to/book-monitor/logs/monitor_$(date +\%Y\%m\%d).log 2>&1
 ```
 
 Cron syntax: `minute hour day month weekday`
-- Every 12 hours: `0 */12 * * *`
-- Weekly (Monday 8 AM): `0 8 * * 1`
 
 ### Search for NEW or ANY Condition
 
@@ -442,16 +421,15 @@ monitoring:
 
 - Check spam/junk folder
 - Verify sender email in Brevo dashboard
-- Check GitHub Actions logs for errors
+- Check cron job logs: `tail -f logs/monitor_$(date +%Y%m%d).log`
 - Ensure `BREVO_API_KEY` starts with `xkeysib-` (not `xsmtpsib-`)
 
-### GitHub Actions Failing
+### Cron Job Not Running
 
-- Go to **Actions** tab → click failed run → view logs
-- Common issues:
-  - Missing `BREVO_API_KEY` secret
-  - Google Sheet not public
-  - Playwright installation failed (should auto-install)
+- Verify cron job is installed: `crontab -l`
+- Check environment variables are set in crontab
+- Verify Python path is correct: `which python3`
+- Check logs for errors: `tail -f logs/monitor_*.log`
 
 ## Legal & Ethical Considerations
 
@@ -474,7 +452,7 @@ monitoring:
 
 | Service | Free Tier | Typical Usage | Cost |
 |---------|-----------|---------------|------|
-| GitHub Actions | 2,000 min/month | ~3 min/day = 90 min/month | $0 |
+| Local Cron | Unlimited | Runs on your computer | $0 |
 | Brevo Email | 300 emails/day | 1 email/day | $0 |
 | Google Sheets | Unlimited | 1 sheet | $0 |
 | **Total** | | | **$0/month** |
@@ -484,7 +462,7 @@ monitoring:
 - **v2 (Current)**: Google Sheets-based flexible search system
   - Support for Author, Title, Year, Keywords
   - Smart author filtering to prevent false matches
-  - Daily automated monitoring via GitHub Actions
+  - Daily automated monitoring via local cron job
 
 - **v1 (Archived)**: Zotero library-based system → `archive/v1-zotero/`
 
