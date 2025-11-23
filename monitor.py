@@ -66,10 +66,11 @@ def sync_search_specs(sheet_id: str, db: Database) -> int:
     loader = SheetsLoader(sheet_id)
     search_specs = loader.load_search_specs()
 
-    # Upsert search specs to database
+    # Upsert search specs to database and collect valid spec_ids
     synced_count = 0
+    valid_spec_ids = []
     for spec in search_specs:
-        db.upsert_search_spec(
+        spec_id = db.upsert_search_spec(
             author=spec['author'],
             title=spec['title'],
             year=spec['year'],
@@ -78,7 +79,13 @@ def sync_search_specs(sheet_id: str, db: Database) -> int:
             max_price=spec.get('max_price'),
             accept_new=spec.get('accept_new', False)
         )
+        valid_spec_ids.append(spec_id)
         synced_count += 1
+
+    # Delete specs that are no longer in the Google Sheet
+    deleted_count = db.delete_stale_search_specs(valid_spec_ids)
+    if deleted_count > 0:
+        logger.info(f"Removed {deleted_count} specs no longer in Google Sheet")
 
     logger.info(f"Synced {synced_count} search specifications to database")
     return synced_count

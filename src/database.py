@@ -302,6 +302,9 @@ class Database:
                            accept_new: bool = False) -> str:
         """Insert or update a search specification record.
 
+        When filter criteria (max_price, accept_new) change, automatically
+        resets notifications for matching listings so they can be re-evaluated.
+
         Args:
             author: Author name
             title: Book title (optional)
@@ -316,6 +319,27 @@ class Database:
         """
         spec_id = self.generate_search_spec_id(author, title)
         cursor = self.conn.cursor()
+
+        # Check if record exists and if filter criteria have changed
+        cursor.execute("""
+            SELECT max_price, accept_new FROM search_specs WHERE spec_id = ?
+        """, (spec_id,))
+        existing = cursor.fetchone()
+
+        criteria_changed = False
+        if existing:
+            old_max_price = existing['max_price']
+            old_accept_new = existing['accept_new']
+
+            # Detect changes in filter criteria
+            if old_max_price != max_price or bool(old_accept_new) != accept_new:
+                criteria_changed = True
+                logger.info(f"Filter criteria changed for {author}" +
+                           (f" - {title}" if title else "") +
+                           f": max_price {old_max_price} -> {max_price}, " +
+                           f"accept_new {old_accept_new} -> {accept_new}")
+
+        # Perform the upsert
         cursor.execute("""
             INSERT INTO search_specs (spec_id, author, title, publication_year, keywords, isbn, max_price, accept_new)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -329,6 +353,11 @@ class Database:
                 accept_new = excluded.accept_new
         """, (spec_id, author, title, year, keywords, isbn, max_price, accept_new))
         self.conn.commit()
+
+        # Reset notifications if filter criteria changed
+        if criteria_changed:
+            self.reset_notifications_for_spec(author, title)
+
         logger.debug(f"Upserted search spec: {spec_id} - {author}" +
                     (f" - {title}" if title else "") +
                     (f" [accept_new={accept_new}]" if accept_new else ""))
@@ -349,6 +378,66 @@ class Database:
         """)
         return [dict(row) for row in cursor.fetchall()]
 
+    def delete_stale_search_specs(self, valid_spec_ids: List[str]) -> int:
+        """Delete search specs not in the provided list (removed from Google Sheet).
+
+        Also deletes associated listings for the removed specs.
+
+        Args:
+            valid_spec_ids: List of spec_ids that should be kept
+
+        Returns:
+            Number of specs deleted
+        """
+        cursor = self.conn.cursor()
+
+        # Find specs to delete
+        placeholders = ','.join('?' * len(valid_spec_ids)) if valid_spec_ids else "''"
+        cursor.execute(f"""
+            SELECT spec_id, author, title FROM search_specs
+            WHERE spec_id NOT IN ({placeholders})
+        """, valid_spec_ids if valid_spec_ids else [])
+        stale_specs = cursor.fetchall()
+
+        if not stale_specs:
+            return 0
+
+        # Log what we're deleting
+        for spec in stale_specs:
+            spec_desc = f"{spec['author']}" + (f" - {spec['title']}" if spec['title'] else "")
+            logger.info(f"Removing stale search spec: {spec_desc}")
+
+        stale_spec_ids = [spec['spec_id'] for spec in stale_specs]
+        stale_placeholders = ','.join('?' * len(stale_spec_ids))
+
+        # Delete listings for books by these authors (approximate cleanup)
+        for spec in stale_specs:
+            author = spec['author']
+            title = spec['title']
+            if title:
+                cursor.execute("""
+                    DELETE FROM listings WHERE book_id IN (
+                        SELECT book_id FROM books
+                        WHERE LOWER(author) LIKE LOWER(?) AND LOWER(title) LIKE LOWER(?)
+                    )
+                """, (f"%{author}%", f"%{title}%"))
+            else:
+                cursor.execute("""
+                    DELETE FROM listings WHERE book_id IN (
+                        SELECT book_id FROM books WHERE LOWER(author) LIKE LOWER(?)
+                    )
+                """, (f"%{author}%",))
+
+        # Delete the search specs
+        cursor.execute(f"""
+            DELETE FROM search_specs WHERE spec_id IN ({stale_placeholders})
+        """, stale_spec_ids)
+
+        deleted_count = len(stale_spec_ids)
+        self.conn.commit()
+        logger.info(f"Deleted {deleted_count} stale search specs")
+        return deleted_count
+
     def update_search_spec_checked(self, spec_id: str):
         """Update last_checked timestamp for a search specification.
 
@@ -362,6 +451,52 @@ class Database:
             WHERE spec_id = ?
         """, (spec_id,))
         self.conn.commit()
+
+    def reset_notifications_for_spec(self, author: str, title: Optional[str] = None) -> int:
+        """Reset notified flag for listings matching a search spec.
+
+        When filter criteria change (max_price, accept_new), this allows
+        previously-notified listings to be re-evaluated and re-sent.
+
+        Args:
+            author: Author name to match
+            title: Book title to match (optional)
+
+        Returns:
+            Number of listings reset
+        """
+        cursor = self.conn.cursor()
+
+        if title:
+            # Reset for specific book
+            cursor.execute("""
+                UPDATE listings
+                SET notified = 0
+                WHERE book_id IN (
+                    SELECT book_id FROM books
+                    WHERE LOWER(author) = LOWER(?)
+                    AND LOWER(title) = LOWER(?)
+                )
+            """, (author, title))
+        else:
+            # Reset for all books by author
+            cursor.execute("""
+                UPDATE listings
+                SET notified = 0
+                WHERE book_id IN (
+                    SELECT book_id FROM books
+                    WHERE LOWER(author) LIKE LOWER(?)
+                )
+            """, (f"%{author}%",))
+
+        reset_count = cursor.rowcount
+        self.conn.commit()
+
+        if reset_count > 0:
+            logger.info(f"Reset notifications for {reset_count} listings (author: {author}" +
+                       (f", title: {title})" if title else ")"))
+
+        return reset_count
 
     def get_unnotified_listings_by_author(self) -> Dict[str, List[Dict]]:
         """Get unnotified listings grouped by author.
